@@ -34,6 +34,7 @@
 struct map_data {
     struct domain *d;
     const struct vpci_bar *bar;
+    const struct pci_dev *pdev;
     bool map;
 };
 
@@ -46,7 +47,9 @@ static int cf_check map_range(
     for ( ; ; )
     {
         /* Start address of the BAR as seen by the guest. */
-        gfn_t start_gfn = _gfn(PFN_DOWN(is_hardware_pci_domain(map->d)
+        gfn_t start_gfn = _gfn(PFN_DOWN(pci_is_hardware_domain(map->d,
+                                                               map->pdev->seg,
+                                                               map->pdev->bus)
                                         ? map->bar->addr
                                         : map->bar->guest_addr));
         /* Physical start address of the BAR. */
@@ -192,6 +195,7 @@ bool vpci_process_pending(struct vcpu *v)
             .d = v->domain,
             .map = v->vpci.cmd & PCI_COMMAND_MEMORY,
             .bar = bar,
+            .pdev = pdev,
         };
         int rc;
 
@@ -218,7 +222,7 @@ bool vpci_process_pending(struct vcpu *v)
 
             read_unlock(&v->domain->pci_lock);
 
-            if ( is_hardware_domain(v->domain) )
+            if ( pci_is_hardware_domain(v->domain, pdev->seg, pdev->bus) )
             {
                 write_lock(&v->domain->pci_lock);
                 vpci_deassign_device(v->vpci.pdev);
@@ -254,7 +258,7 @@ static int __init apply_map(struct domain *d, const struct pci_dev *pdev,
     for ( i = 0; i < ARRAY_SIZE(header->bars); i++ )
     {
         struct vpci_bar *bar = &header->bars[i];
-        struct map_data data = { .d = d, .map = true, .bar = bar };
+        struct map_data data = { .d = d, .map = true, .bar = bar, .pdev = pdev };
 
         if ( rangeset_is_empty(bar->mem) )
             continue;
@@ -330,9 +334,10 @@ static int modify_bars(const struct pci_dev *pdev, uint16_t cmd, bool rom_only)
         struct vpci_bar *bar = &header->bars[i];
         unsigned long start = PFN_DOWN(bar->addr);
         unsigned long end = PFN_DOWN(bar->addr + bar->size - 1);
-        unsigned long start_guest = PFN_DOWN(is_hardware_domain(pdev->domain) ?
+        bool is_hwdom = pci_is_hardware_domain(pdev->domain, pdev->seg, pdev->bus);
+        unsigned long start_guest = PFN_DOWN(is_hwdom ?
                                              bar->addr : bar->guest_addr);
-        unsigned long end_guest = PFN_DOWN((is_hardware_domain(pdev->domain) ?
+        unsigned long end_guest = PFN_DOWN((is_hwdom ?
                                   bar->addr : bar->guest_addr) + bar->size - 1);
 
         if ( !bar->mem )
@@ -442,9 +447,10 @@ static int modify_bars(const struct pci_dev *pdev, uint16_t cmd, bool rom_only)
             for ( i = 0; i < ARRAY_SIZE(tmp->vpci->header.bars); i++ )
             {
                 const struct vpci_bar *remote_bar = &tmp->vpci->header.bars[i];
-                unsigned long start = PFN_DOWN(is_hardware_domain(pdev->domain) ?
+                bool is_hwdom = pci_is_hardware_domain(pdev->domain, pdev->seg, pdev->bus);
+                unsigned long start = PFN_DOWN(is_hwdom ?
                                       remote_bar->addr : remote_bar->guest_addr);
-                unsigned long end = PFN_DOWN(is_hardware_domain(pdev->domain) ?
+                unsigned long end = PFN_DOWN(is_hwdom ?
                                     remote_bar->addr : remote_bar->guest_addr +
                                              remote_bar->size - 1);
 
@@ -509,7 +515,7 @@ static void cf_check cmd_write(
     struct vpci_header *header = data;
     uint16_t current_cmd = pci_conf_read16(pdev->sbdf, reg);
 
-    if ( !is_hardware_domain(pdev->domain) )
+    if ( !pci_is_hardware_domain(pdev->domain, pdev->seg, pdev->bus) )
     {
         if ( IS_ENABLED(CONFIG_HAS_PCI_MSI) )
         {
@@ -767,7 +773,7 @@ static int cf_check init_bars(struct pci_dev *pdev)
     struct vpci_header *header = &pdev->vpci->header;
     struct vpci_bar *bars = header->bars;
     int rc;
-    bool is_hwdom = is_hardware_pci_domain(pdev->domain);
+    bool is_hwdom = pci_is_hardware_domain(pdev->domain, pdev->seg, pdev->bus);
     uint8_t type;
 
     ASSERT(rw_is_locked(&pdev->domain->pci_lock));
@@ -820,7 +826,7 @@ static int cf_check init_bars(struct pci_dev *pdev)
     if ( rc )
         return rc;
 
-    if ( !is_hardware_domain(pdev->domain) )
+    if ( !is_hwdom )
     {
         if ( !(pci_conf_read16(pdev->sbdf, PCI_STATUS) & PCI_STATUS_CAP_LIST) )
         {
