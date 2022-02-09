@@ -57,6 +57,11 @@ void pcidevs_lock(void)
     spin_lock_recursive(&_pcidevs_lock);
 }
 
+int pcidevs_trylock(void)
+{
+    return spin_trylock_recursive(&_pcidevs_lock);
+}
+
 void pcidevs_unlock(void)
 {
     spin_unlock_recursive(&_pcidevs_lock);
@@ -1144,7 +1149,9 @@ static void __hwdom_init setup_one_hwdom_device(const struct setup_hwdom *ctxt,
     } while ( devfn != pdev->devfn &&
               PCI_SLOT(devfn) == PCI_SLOT(pdev->devfn) );
 
+    write_lock(&ctxt->d->pci_lock);
     err = vpci_add_handlers(pdev);
+    write_unlock(&ctxt->d->pci_lock);
     if ( err )
         printk(XENLOG_ERR "setup of vPCI for d%d failed: %d\n",
                ctxt->d->domain_id, err);
