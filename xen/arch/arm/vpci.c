@@ -2,6 +2,7 @@
 /*
  * xen/arch/arm/vpci.c
  */
+#include <xen/iocap.h>
 #include <xen/sched.h>
 #include <xen/vpci.h>
 #include <xen/keyhandler.h>
@@ -179,8 +180,13 @@ int domain_vpci_init(struct domain *d)
 
     /* LORC: Revisit this  */
     if ( !is_control_domain(d) )
+    {
         register_mmio_handler(d, &vpci_mmio_handler,
                               GUEST_VPCI_ECAM_BASE, GUEST_VPCI_ECAM_SIZE, NULL);
+        iomem_permit_access(d, paddr_to_pfn(GUEST_VPCI_MEM_ADDR),
+                            paddr_to_pfn(PAGE_ALIGN(GUEST_VPCI_MEM_ADDR +
+                                                    GUEST_VPCI_MEM_SIZE - 1)));
+    }
 
     return 0;
 }
