@@ -4204,6 +4204,9 @@ _hidden int libxl__destroy_qdisk_backend(libxl__gc *gc, uint32_t domid);
 _hidden int libxl__save_dm_virtio_pci_host(libxl__gc *gc,
                                            uint32_t domid,
                                            libxl_virtio_pci_host *host);
+_hidden int libxl__wait_for_qdisk_backend_ready(libxl__gc *gc,
+                                                uint32_t domid,
+                                                uint32_t backend_domid);
 _hidden int libxl__save_qdisk_backend_dm_args(libxl__gc *gc,
                                               uint32_t domid,
                                               uint32_t backend_domid,
