@@ -99,14 +99,14 @@ static int vpci_mmio_read_root(struct vcpu *v, mmio_info_t *info,
     struct pci_host_bridge *bridge = p;
     pci_sbdf_t sbdf;
 
-    ASSERT(!bridge == !is_hardware_domain(v->domain));
-
-    if ( bridge )
+    if ( bridge ) {
+        ASSERT(!bridge == !pci_is_hardware_domain(v->domain, bridge->segment,
+                                                  bridge->cfg->busn_start));
         sbdf = vpci_sbdf_from_gpa(bridge->segment,
                                   bridge->cfg->busn_start,
                                   bridge->cfg->phys_addr,
                                   info->gpa);
-    else
+    } else
         sbdf = vpci_sbdf_from_gpa(0, 0, GUEST_VPCI_ECAM_BASE, info->gpa);
 
     return vpci_mmio_read(v, info, r, !bridge, sbdf);
@@ -118,7 +118,8 @@ static int vpci_mmio_read_child(struct vcpu *v, mmio_info_t *info,
     struct pci_host_bridge *bridge = p;
     pci_sbdf_t sbdf;
 
-    ASSERT(!bridge == !is_hardware_domain(v->domain));
+    ASSERT(bridge && pci_is_hardware_domain(v->domain, bridge->segment,
+                                            bridge->cfg->busn_start));
 
     sbdf = vpci_sbdf_from_gpa(bridge->segment,
                               bridge->child_cfg->busn_start,
@@ -175,14 +176,14 @@ static int vpci_mmio_write_root(struct vcpu *v, mmio_info_t *info,
     struct pci_host_bridge *bridge = p;
     pci_sbdf_t sbdf;
 
-    ASSERT(!bridge == !is_hardware_domain(v->domain));
-
-    if ( bridge )
+    if ( bridge ) {
+	ASSERT(!bridge == !pci_is_hardware_domain(v->domain, bridge->segment,
+                                                  bridge->cfg->busn_start));
         sbdf = vpci_sbdf_from_gpa(bridge->segment,
                                   bridge->cfg->busn_start,
                                   bridge->cfg->phys_addr,
                                   info->gpa);
-    else
+    } else
         sbdf = vpci_sbdf_from_gpa(0, 0, GUEST_VPCI_ECAM_BASE, info->gpa);
 
     return vpci_mmio_write(v, info, r, !bridge, sbdf);
@@ -194,7 +195,8 @@ static int vpci_mmio_write_child(struct vcpu *v, mmio_info_t *info,
     struct pci_host_bridge *bridge = p;
     pci_sbdf_t sbdf;
 
-    ASSERT(!bridge == !is_hardware_domain(v->domain));
+    ASSERT(bridge && pci_is_hardware_domain(v->domain, bridge->segment,
+                                            bridge->cfg->busn_start));
 
     sbdf = vpci_sbdf_from_gpa(bridge->segment,
                               bridge->child_cfg->busn_start,
