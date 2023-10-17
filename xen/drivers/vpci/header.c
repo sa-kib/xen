@@ -386,8 +386,8 @@ static int modify_bars(const struct pci_dev *pdev, uint16_t cmd, bool rom_only)
     /* Remove any MSIX regions if present. */
     for ( i = 0; msix && i < ARRAY_SIZE(msix->tables); i++ )
     {
-        unsigned long start = PFN_DOWN(vmsix_table_addr(pdev->vpci, i));
-        unsigned long end =  PFN_DOWN(vmsix_table_addr(pdev->vpci, i) +
+        unsigned long start = PFN_DOWN(vmsix_guest_table_addr(pdev->vpci, i));
+        unsigned long end =  PFN_DOWN(vmsix_guest_table_addr(pdev->vpci, i) +
                                       vmsix_table_size(pdev->vpci, i) - 1);
 
         for ( j = 0; j < ARRAY_SIZE(header->bars); j++ )
