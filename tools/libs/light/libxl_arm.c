@@ -20,8 +20,8 @@
  */
 #define VIRTIO_MMIO_DEV_SIZE   xen_mk_ullong(0x200)
 
-#define VIRTIO_PCI_HOST_MEM_SIZE            xen_mk_ullong(0x800000)
-#define VIRTIO_PCI_HOST_PREFETCH_MEM_SIZE   xen_mk_ullong(0x800000)
+#define VIRTIO_PCI_HOST_MEM_SIZE            xen_mk_ullong(0x400000)
+#define VIRTIO_PCI_HOST_PREFETCH_MEM_SIZE   xen_mk_ullong(0x400000)
 #define VIRTIO_PCI_HOST_NUM_SPIS            4
 #define VIRTIO_PCI_MAX_HOSTS                8
 
@@ -1257,7 +1257,7 @@ static int make_virtio_pci_node(libxl__gc *gc, void *fdt,
         GUEST_ROOT_SIZE_CELLS, 1, host->ecam_base, host->ecam_size);
     if (res) return res;
 
-    res = fdt_property_values(gc, fdt, "bus-range", 2, 0, 1);
+    res = fdt_property_values(gc, fdt, "bus-range", 2, 0, 0);
     if (res) return res;
 
     res = fdt_property_cell(fdt, "#address-cells", 3);
