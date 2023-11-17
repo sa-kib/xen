@@ -5,7 +5,6 @@
 #include <xen/iocap.h>
 #include <xen/ioreq.h>
 #include <xen/sched.h>
-#include <xen/sizes.h>
 #include <xen/vpci.h>
 #include <xen/keyhandler.h>
 
@@ -47,22 +46,19 @@ static bool_t vpci_sbdf_from_gpa(struct domain *d,
     return true;
 }
 
-bool virtio_pci_ioreq_server_get_addr(const struct domain *d,
-                                      paddr_t gpa, uint64_t *addr)
+bool vpci_ioreq_server_get_addr(const struct domain *d,
+                                paddr_t gpa, uint64_t *addr)
 {
     pci_sbdf_t sbdf;
 
     if ( !has_vpci(d) )
         return false;
 
-    if ( gpa < GUEST_VIRTIO_PCI_ECAM_BASE ||
-         gpa >= GUEST_VIRTIO_PCI_ECAM_BASE + GUEST_VIRTIO_PCI_TOTAL_ECAM_SIZE )
+    if ( gpa < GUEST_VPCI_ECAM_BASE ||
+         gpa >= GUEST_VPCI_ECAM_BASE + GUEST_VPCI_ECAM_SIZE )
         return false;
 
-    sbdf.sbdf = VPCI_ECAM_BDF((gpa - GUEST_VIRTIO_PCI_ECAM_BASE) %
-        GUEST_VIRTIO_PCI_HOST_ECAM_SIZE);
-    sbdf.seg = (gpa - GUEST_VIRTIO_PCI_ECAM_BASE) /
-        GUEST_VIRTIO_PCI_HOST_ECAM_SIZE;
+    sbdf.sbdf = VPCI_ECAM_BDF(gpa - GUEST_VPCI_ECAM_BASE);
     *addr = ((uint64_t)sbdf.sbdf << 32) | ECAM_REG_OFFSET(gpa);
 
     return true;
@@ -99,8 +95,24 @@ static int vpci_mmio_read_root(struct vcpu *v, mmio_info_t *info,
     if ( !vpci_sbdf_from_gpa(v->domain, bridge, info->gpa,
                              true, &sbdf) )
     {
+        int rc = IO_HANDLED;
+
+#if defined(CONFIG_HAS_VPCI_GUEST_SUPPORT) && defined(CONFIG_IOREQ_SERVER)
+        if ( domain_has_ioreq_server(v->domain) )
+        {
+             rc = try_fwd_ioserv(guest_cpu_user_regs(), v, info);
+             if ( rc == IO_HANDLED )
+             {
+                 *r = v->io.req.data;
+                 v->io.req.state = STATE_IOREQ_NONE;
+                 return IO_HANDLED;
+             }
+             else if ( rc == IO_UNHANDLED )
+                 rc = IO_HANDLED;
+         }
+ #endif
         *r = access_mask;
-        return IO_HANDLED;
+         return rc;
     }
 
     return vpci_mmio_read(v, info, r, sbdf);
@@ -117,8 +129,24 @@ static int vpci_mmio_read_child(struct vcpu *v, mmio_info_t *info,
     if ( !vpci_sbdf_from_gpa(v->domain, bridge, info->gpa,
                              false, &sbdf) )
     {
+        int rc = IO_HANDLED;
+
+#if defined(CONFIG_HAS_VPCI_GUEST_SUPPORT) && defined(CONFIG_IOREQ_SERVER)
+        if ( domain_has_ioreq_server(v->domain) )
+        {
+             rc = try_fwd_ioserv(guest_cpu_user_regs(), v, info);
+             if ( rc == IO_HANDLED )
+             {
+                 *r = v->io.req.data;
+                 v->io.req.state = STATE_IOREQ_NONE;
+                 return IO_HANDLED;
+             }
+             else if ( rc == IO_UNHANDLED )
+                 rc = IO_HANDLED;
+         }
+ #endif
         *r = access_mask;
-        return IO_HANDLED;
+         return rc;
     }
 
     return vpci_mmio_read(v, info, r, sbdf);
@@ -139,7 +167,24 @@ static int vpci_mmio_write_root(struct vcpu *v, mmio_info_t *info,
 
     if ( !vpci_sbdf_from_gpa(v->domain, bridge, info->gpa,
                              true, &sbdf) )
-         return IO_HANDLED;
+    {
+        int rc = IO_HANDLED;
+
+#if defined(CONFIG_HAS_VPCI_GUEST_SUPPORT) && defined(CONFIG_IOREQ_SERVER)
+        if ( domain_has_ioreq_server(v->domain) )
+        {
+             rc = try_fwd_ioserv(guest_cpu_user_regs(), v, info);
+             if ( rc == IO_HANDLED )
+             {
+                 v->io.req.state = STATE_IOREQ_NONE;
+                 return IO_HANDLED;
+             }
+             else if ( rc == IO_UNHANDLED )
+                 rc = IO_HANDLED;
+         }
+ #endif
+         return rc;
+    }
 
     return vpci_mmio_write(v, info, r, sbdf);
 }
@@ -152,7 +197,24 @@ static int vpci_mmio_write_child(struct vcpu *v, mmio_info_t *info,
 
     if ( !vpci_sbdf_from_gpa(v->domain, bridge, info->gpa,
                              false, &sbdf) )
-         return IO_HANDLED;
+    {
+        int rc = IO_HANDLED;
+
+#if defined(CONFIG_HAS_VPCI_GUEST_SUPPORT) && defined(CONFIG_IOREQ_SERVER)
+        if ( domain_has_ioreq_server(v->domain) )
+        {
+             rc = try_fwd_ioserv(guest_cpu_user_regs(), v, info);
+             if ( rc == IO_HANDLED )
+             {
+                 v->io.req.state = STATE_IOREQ_NONE;
+                 return IO_HANDLED;
+             }
+             else if ( rc == IO_UNHANDLED )
+                 rc = IO_HANDLED;
+         }
+ #endif
+         return rc;
+    }
 
     return vpci_mmio_write(v, info, r, sbdf);
 }
@@ -166,61 +228,6 @@ static const struct mmio_handler_ops vpci_mmio_handler_child = {
     .read  = vpci_mmio_read_child,
     .write = vpci_mmio_write_child,
 };
-
-#ifdef CONFIG_VIRTIO_PCI
-static int virtio_pci_mmio_read(struct vcpu *v, mmio_info_t *info,
-                                register_t *r, void *p)
-{
-    const uint8_t access_size = (1 << info->dabt.size) * 8;
-    const uint64_t access_mask = GENMASK_ULL(access_size - 1, 0);
-    int rc = IO_HANDLED;
-
-    ASSERT(!is_hardware_domain(v->domain));
-
-    if ( domain_has_ioreq_server(v->domain) )
-    {
-        rc = try_fwd_ioserv(guest_cpu_user_regs(), v, info);
-        if ( rc == IO_HANDLED )
-        {
-            *r = v->io.req.data;
-            v->io.req.state = STATE_IOREQ_NONE;
-            return IO_HANDLED;
-        }
-        else if ( rc == IO_UNHANDLED )
-            rc = IO_HANDLED;
-    }
-
-    *r = access_mask;
-    return rc;
-}
-
-static int virtio_pci_mmio_write(struct vcpu *v, mmio_info_t *info,
-                                 register_t r, void *p)
-{
-    int rc = IO_HANDLED;
-
-    ASSERT(!is_hardware_domain(v->domain));
-
-    if ( domain_has_ioreq_server(v->domain) )
-    {
-        rc = try_fwd_ioserv(guest_cpu_user_regs(), v, info);
-        if ( rc == IO_HANDLED )
-        {
-            v->io.req.state = STATE_IOREQ_NONE;
-            return IO_HANDLED;
-        }
-        else if ( rc == IO_UNHANDLED )
-            rc = IO_HANDLED;
-    }
-
-    return rc;
-}
-
-static const struct mmio_handler_ops virtio_pci_mmio_handler = {
-    .read  = virtio_pci_mmio_read,
-    .write = virtio_pci_mmio_write,
-};
-#endif
 
 static int vpci_setup_mmio_handler_cb(struct domain *d,
                                       struct pci_host_bridge *bridge)
@@ -278,12 +285,6 @@ int domain_vpci_init(struct domain *d)
         iomem_permit_access(d, paddr_to_pfn(GUEST_VPCI_PREFETCH_MEM_ADDR),
                             paddr_to_pfn(GUEST_VPCI_PREFETCH_MEM_ADDR +
                                          GUEST_VPCI_PREFETCH_MEM_SIZE - 1));
-
-#ifdef CONFIG_VIRTIO_PCI
-        register_mmio_handler(d, &virtio_pci_mmio_handler,
-                              GUEST_VIRTIO_PCI_ECAM_BASE,
-                              GUEST_VIRTIO_PCI_TOTAL_ECAM_SIZE, NULL);
-#endif
     }
 
     return 0;
@@ -333,14 +334,6 @@ unsigned int domain_vpci_get_num_mmio_handlers(struct domain *d)
          * configuration space. At the moment, we only expose a single host bridge.
          */
         count = 1;
-       /*
-        * In order to not mix PCI passthrough with virtio-pci features we add
-        * one more region to cover the total configuration space for all possible
-        * host bridges which can serve virtio devices for that guest.
-        * We expose one host bridge per virtio backend domain.
-        */
-        if ( IS_ENABLED(CONFIG_VIRTIO_PCI) )
-            count++;
 
         /*
          * There's a single MSI-X MMIO handler that deals with both PBA
