@@ -3,7 +3,6 @@
  * xen/arch/arm/vpci.c
  */
 #include <xen/iocap.h>
-#include <xen/ioreq.h>
 #include <xen/sched.h>
 #include <xen/vpci.h>
 #include <xen/keyhandler.h>
@@ -46,24 +45,6 @@ static bool_t vpci_sbdf_from_gpa(struct domain *d,
     return true;
 }
 
-bool vpci_ioreq_server_get_addr(const struct domain *d,
-                                paddr_t gpa, uint64_t *addr)
-{
-    pci_sbdf_t sbdf;
-
-    if ( !has_vpci(d) )
-        return false;
-
-    if ( gpa < GUEST_VPCI_ECAM_BASE ||
-         gpa >= GUEST_VPCI_ECAM_BASE + GUEST_VPCI_ECAM_SIZE )
-        return false;
-
-    sbdf.sbdf = VPCI_ECAM_BDF(gpa - GUEST_VPCI_ECAM_BASE);
-    *addr = ((uint64_t)sbdf.sbdf << 32) | ECAM_REG_OFFSET(gpa);
-
-    return true;
-}
-
 static int vpci_mmio_read(struct vcpu *v, mmio_info_t *info, register_t *r,
                           pci_sbdf_t sbdf)
 {
@@ -95,24 +76,8 @@ static int vpci_mmio_read_root(struct vcpu *v, mmio_info_t *info,
     if ( !vpci_sbdf_from_gpa(v->domain, bridge, info->gpa,
                              true, &sbdf) )
     {
-        int rc = IO_HANDLED;
-
-#if defined(CONFIG_HAS_VPCI_GUEST_SUPPORT) && defined(CONFIG_IOREQ_SERVER)
-        if ( domain_has_ioreq_server(v->domain) )
-        {
-             rc = try_fwd_ioserv(guest_cpu_user_regs(), v, info);
-             if ( rc == IO_HANDLED )
-             {
-                 *r = v->io.req.data;
-                 v->io.req.state = STATE_IOREQ_NONE;
-                 return IO_HANDLED;
-             }
-             else if ( rc == IO_UNHANDLED )
-                 rc = IO_HANDLED;
-         }
- #endif
         *r = access_mask;
-         return rc;
+        return 1;
     }
 
     return vpci_mmio_read(v, info, r, sbdf);
@@ -129,24 +94,8 @@ static int vpci_mmio_read_child(struct vcpu *v, mmio_info_t *info,
     if ( !vpci_sbdf_from_gpa(v->domain, bridge, info->gpa,
                              false, &sbdf) )
     {
-        int rc = IO_HANDLED;
-
-#if defined(CONFIG_HAS_VPCI_GUEST_SUPPORT) && defined(CONFIG_IOREQ_SERVER)
-        if ( domain_has_ioreq_server(v->domain) )
-        {
-             rc = try_fwd_ioserv(guest_cpu_user_regs(), v, info);
-             if ( rc == IO_HANDLED )
-             {
-                 *r = v->io.req.data;
-                 v->io.req.state = STATE_IOREQ_NONE;
-                 return IO_HANDLED;
-             }
-             else if ( rc == IO_UNHANDLED )
-                 rc = IO_HANDLED;
-         }
- #endif
         *r = access_mask;
-         return rc;
+        return 1;
     }
 
     return vpci_mmio_read(v, info, r, sbdf);
@@ -167,24 +116,7 @@ static int vpci_mmio_write_root(struct vcpu *v, mmio_info_t *info,
 
     if ( !vpci_sbdf_from_gpa(v->domain, bridge, info->gpa,
                              true, &sbdf) )
-    {
-        int rc = IO_HANDLED;
-
-#if defined(CONFIG_HAS_VPCI_GUEST_SUPPORT) && defined(CONFIG_IOREQ_SERVER)
-        if ( domain_has_ioreq_server(v->domain) )
-        {
-             rc = try_fwd_ioserv(guest_cpu_user_regs(), v, info);
-             if ( rc == IO_HANDLED )
-             {
-                 v->io.req.state = STATE_IOREQ_NONE;
-                 return IO_HANDLED;
-             }
-             else if ( rc == IO_UNHANDLED )
-                 rc = IO_HANDLED;
-         }
- #endif
-         return rc;
-    }
+        return 1;
 
     return vpci_mmio_write(v, info, r, sbdf);
 }
@@ -197,24 +129,7 @@ static int vpci_mmio_write_child(struct vcpu *v, mmio_info_t *info,
 
     if ( !vpci_sbdf_from_gpa(v->domain, bridge, info->gpa,
                              false, &sbdf) )
-    {
-        int rc = IO_HANDLED;
-
-#if defined(CONFIG_HAS_VPCI_GUEST_SUPPORT) && defined(CONFIG_IOREQ_SERVER)
-        if ( domain_has_ioreq_server(v->domain) )
-        {
-             rc = try_fwd_ioserv(guest_cpu_user_regs(), v, info);
-             if ( rc == IO_HANDLED )
-             {
-                 v->io.req.state = STATE_IOREQ_NONE;
-                 return IO_HANDLED;
-             }
-             else if ( rc == IO_UNHANDLED )
-                 rc = IO_HANDLED;
-         }
- #endif
-         return rc;
-    }
+        return 1;
 
     return vpci_mmio_write(v, info, r, sbdf);
 }
