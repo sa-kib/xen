@@ -603,8 +603,9 @@ static int libxl__disk_from_xenstore(libxl__gc *gc, const char *libxl_path,
             LOG(ERROR, "Unable to parse xenstore node %s/transport", libxl_path);
             goto cleanup;
         }
-        if (disk->transport != LIBXL_DISK_TRANSPORT_MMIO) {
-            LOG(ERROR, "Only transport mmio is expected for specification virtio");
+        if (disk->transport != LIBXL_DISK_TRANSPORT_MMIO &&
+            disk->transport != LIBXL_DISK_TRANSPORT_PCI) {
+            LOG(ERROR, "Only transport pci or mmio is expected for specification virtio");
             goto cleanup;
         }
 

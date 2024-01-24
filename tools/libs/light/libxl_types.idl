@@ -142,6 +142,7 @@ libxl_disk_specification = Enumeration("disk_specification", [
 libxl_disk_transport = Enumeration("disk_transport", [
     (0, "UNKNOWN"),
     (1, "MMIO"),
+    (2, "PCI"),
     ])
 
 libxl_nic_type = Enumeration("nic_type", [
