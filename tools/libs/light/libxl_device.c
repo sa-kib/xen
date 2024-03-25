@@ -496,7 +496,11 @@ char *libxl__device_disk_string_of_specification(libxl_disk_specification specif
 
 char *libxl__device_disk_string_of_transport(libxl_disk_transport transport)
 {
-    return (transport == LIBXL_DISK_TRANSPORT_MMIO ? "mmio" : NULL);
+    switch (transport) {
+        case LIBXL_DISK_TRANSPORT_MMIO: return "mmio";
+        case LIBXL_DISK_TRANSPORT_PCI: return "pci";
+        default: return NULL;
+    }
 }
 
 const char *libxl__qemu_disk_format_string(libxl_disk_format format)

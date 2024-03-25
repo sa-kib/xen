@@ -173,14 +173,15 @@ static int libxl__device_disk_setdefault(libxl__gc *gc, uint32_t domid,
         return ERROR_INVAL;
     }
 
-    /* Force transport mmio for specification virtio for now */
     if (disk->specification == LIBXL_DISK_SPECIFICATION_VIRTIO) {
         if (!(disk->transport == LIBXL_DISK_TRANSPORT_UNKNOWN ||
-              disk->transport == LIBXL_DISK_TRANSPORT_MMIO)) {
+              disk->transport == LIBXL_DISK_TRANSPORT_MMIO ||
+              disk->transport == LIBXL_DISK_TRANSPORT_PCI)) {
             LOGD(ERROR, domid, "Unsupported transport for specification virtio");
             return ERROR_INVAL;
         }
-        disk->transport = LIBXL_DISK_TRANSPORT_MMIO;
+        if (disk->transport == LIBXL_DISK_TRANSPORT_UNKNOWN)
+            disk->transport = LIBXL_DISK_TRANSPORT_PCI;
     }
 
     if (hotplug && disk->specification == LIBXL_DISK_SPECIFICATION_VIRTIO) {

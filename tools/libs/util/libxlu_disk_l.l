@@ -133,6 +133,12 @@ static void setspecification(DiskParseContext *dpc, const char *str) {
     else xlu__disk_err(dpc,str,"unknown value for specification");
 }
 
+static void settransport(DiskParseContext *dpc, const char *str) {
+    if      (!strcmp(str,"mmio"))    DSET(dpc,transport,TRANSPORT,str,MMIO);
+    else if (!strcmp(str,"pci")) DSET(dpc,transport,TRANSPORT,str,PCI);
+    else xlu__disk_err(dpc,str,"unknown value for transport");
+}
+
 /* Sets ->colo-port from the string.  COLO need this. */
 static void setcoloport(DiskParseContext *dpc, const char *str) {
     int port = atoi(str);
@@ -201,6 +207,7 @@ access=[^,]*,?	{ STRIP(','); setaccess(DPC, FROMEQUALS); }
 backend=[^,]*,? { STRIP(','); SAVESTRING("backend", backend_domname, FROMEQUALS); }
 backendtype=[^,]*,? { STRIP(','); setbackendtype(DPC,FROMEQUALS); }
 specification=[^,]*,? { STRIP(','); setspecification(DPC,FROMEQUALS); }
+transport=[^,]*,? { STRIP(','); settransport(DPC,FROMEQUALS); }
 
 vdev=[^,]*,?	{ STRIP(','); SAVESTRING("vdev", vdev, FROMEQUALS); }
 script=[^,]*,?	{ STRIP(','); SAVESTRING("script", script, FROMEQUALS); }

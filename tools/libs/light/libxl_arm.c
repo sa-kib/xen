@@ -198,12 +198,19 @@ int libxl__arch_domain_prepare_config(libxl__gc *gc,
         libxl_device_disk *disk = &d_config->disks[i];
 
         if (disk->specification == LIBXL_DISK_SPECIFICATION_VIRTIO) {
-            rc = alloc_virtio_mmio_params(gc, &disk->base, &disk->irq,
-                                          &virtio_mmio_base,
-                                          &virtio_mmio_irq);
+            LOG(ERROR, "disk %u transp %d\n", i, disk->transport);
+            if (disk->transport == LIBXL_DISK_TRANSPORT_MMIO) {
+                rc = alloc_virtio_mmio_params(gc, &disk->base, &disk->irq,
+                                              &virtio_mmio_base,
+                                              &virtio_mmio_irq);
 
-            if (rc)
-                return rc;
+                if (rc)
+                    return rc;
+            } else if (disk->transport == LIBXL_DISK_TRANSPORT_PCI) {
+                disk->base = 0x330f8000;
+                disk->irq = 47;
+                LOG(ERROR, " blyat \n");
+            }
         }
     }
 
@@ -1796,6 +1803,9 @@ next_resize:
 
         for (i = 0; i < d_config->num_disks; i++) {
             libxl_device_disk *disk = &d_config->disks[i];
+
+            if (disk->transport != LIBXL_DISK_TRANSPORT_MMIO)
+                continue;
 
             if (disk->specification == LIBXL_DISK_SPECIFICATION_VIRTIO) {
                 if (disk->backend_domid != LIBXL_TOOLSTACK_DOMID)
